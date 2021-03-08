@@ -4,7 +4,7 @@ const bodyParser= require("body-parser") ;
 const ejs= require("ejs") ;
 const app= express() ;
 const mongoose= require("mongoose") ;
-const encrypt= require("mongoose-encryption") ;
+const md5= require("md5") ;
 
 app.set('view engine', 'ejs') ;
 
@@ -24,9 +24,6 @@ const userSchema= new mongoose.Schema({
 
 
 
-const secret= process.env.SECRET ;
-
-userSchema.plugin(encrypt, {secret: secret, encryptedFields: ["password"]}) ;
 
 const User= mongoose.model("user", userSchema) ;
 
@@ -56,7 +53,7 @@ const User= mongoose.model("user", userSchema) ;
         const newUser= new User({
 
             email: req.body.username ,
-            password: req.body.password
+            password: md5(req.body.password)
         } ) ;
 
         newUser.save( function (err) { 
@@ -76,7 +73,7 @@ const User= mongoose.model("user", userSchema) ;
     app.post("/login", function(req,res){
 
         const uname= req.body.username ;
-        const pass= req.body.password ;
+        const pass= md5(req.body.password) ;
 
         var query = {$and:[{email:{$regex: uname, $options: 'i'}},{password:{$regex: pass, $options: 'i'}}]} ;
 
