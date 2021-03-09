@@ -4,7 +4,8 @@ const bodyParser= require("body-parser") ;
 const ejs= require("ejs") ;
 const app= express() ;
 const mongoose= require("mongoose") ;
-const md5= require("md5") ;
+const bcrypt= require("bcrypt") ;
+const saltRounds = 10;
 
 app.set('view engine', 'ejs') ;
 
@@ -50,42 +51,63 @@ const User= mongoose.model("user", userSchema) ;
 
     app.post("/register",function(req,res){
 
-        const newUser= new User({
+        bcrypt.hash(req.body.password, saltRounds, function(err, hash) {
+            // Store hash in your password DB.
+           
+            const newUser= new User({
 
-            email: req.body.username ,
-            password: md5(req.body.password)
-        } ) ;
+                email: req.body.username ,
+                password: hash
+            } ) ;
+    
+            newUser.save( function (err) { 
+    
+    
+                if(err)console.log(err) ;
+    
+                else{
+                    res.render("secrets") ;
+                }
+    
+             }) ;
 
-        newUser.save( function (err) { 
+        });
 
-
-            if(err)console.log(err) ;
-
-            else{
-                res.render("secrets") ;
-            }
-
-         }) ;
+      
 
     } ) ;
 
 
     app.post("/login", function(req,res){
 
-        const uname= req.body.username ;
-        const pass= md5(req.body.password) ;
+        const username= req.body.username ;
+        const password= req.body.password ;
 
-        var query = {$and:[{email:{$regex: uname, $options: 'i'}},{password:{$regex: pass, $options: 'i'}}]} ;
 
-        User.find(query , function (err, data) {
-            if(err) {
-              console.log(err) ;
+        User.findOne({email:username}, function(err, foundUser){
+
+            if(err)console.log(err) ;
+
+            else
+            {
+                if(foundUser)
+                {
+
+                    bcrypt.compare(password, foundUser.password, function(err, result) {
+                        // result == true
+                        if(result===true)
+                        {
+                            res.render("secrets") ;
+                        }
+                    });
+
+                }
             }
-            else{
-                res.render("secrets") ;
-            }
 
-         });
+        }) ;
+        
+
+    
 
     }) ;
 
