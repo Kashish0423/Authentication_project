@@ -7,6 +7,8 @@ const mongoose= require("mongoose") ;
 const session = require('express-session') ;
 const passport= require("passport") ;
 const passportLocalMongoose= require("passport-local-mongoose") ; 
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const findOrCreate = require('mongoose-findorcreate') ;
 
 
 app.set('view engine', 'ejs') ;
@@ -33,19 +35,43 @@ const userSchema= new mongoose.Schema({
 
 
     email: String,
-    password: String
+    password: String,
+    googleId: String  ,
+    secret: String 
 } );
 
 
 userSchema.plugin(passportLocalMongoose);
+userSchema.plugin(findOrCreate) ;
+
 
 const User= mongoose.model("user", userSchema) ;
 
 passport.use(User.createStrategy());
 
-// use static serialize and deserialize of model for passport session support
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
+passport.serializeUser(function(user, done) {
+  done(null, user.id);
+});
+
+passport.deserializeUser(function(id, done) {
+  User.findById(id, function(err, user) {
+    done(err, user);
+  });
+})
+
+
+passport.use(new GoogleStrategy({
+    clientID: process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/google/secrets"
+  },
+  function(accessToken, refreshToken, profile, cb) {
+
+    User.findOrCreate({ googleId: profile.id }, function (err, user) {
+      return cb(err, user);
+    });
+  }
+));
 
 
     app.get("/", function(req,res){
@@ -55,11 +81,25 @@ passport.deserializeUser(User.deserializeUser());
     }) ;
 
 
+    // for the google auth button 
+
+    app.get('/auth/google',
+    passport.authenticate('google', { scope: ["profile"] }));
+
     app.get("/login", function(req,res){
 
         res.render("login") ;
 
     }) ;
+
+  
+
+  app.get("/auth/google/secrets", 
+  passport.authenticate("google", { failureRedirect: "/login" }),
+  function(req, res) {
+    // Successful authentication, redirect home.
+    res.redirect("/secrets");
+  });
 
     app.get("/register", function(req,res){
 
@@ -73,19 +113,64 @@ passport.deserializeUser(User.deserializeUser());
          // check if the user is already authenticated , as there might be the case that they directly wanna come to the secrets page 
          // after authenticating 
         
+      User.find({"secret": {$ne:null}}, function(err, foundUsers){
 
-        if(req.isAuthenticated()) {   
-        
-        
-            res.render("secrets") ;
-        }
-      
+        if(err)console.log(err) ;
 
-        else{
-            res.redirect("/login") ;
+        else
+        {
+          if(foundUsers)
+          {
+           console.log(foundUsers) ;
+            res.render("secrets", {userWithSecrets: foundUsers}) ;
+          }
         }
+
+      }) ;
        
          
+    }) ;
+
+
+    app.get("/submit", function(req,res){
+
+      if(req.isAuthenticated())
+      {
+        res.render("submit") ;
+      }
+
+  else{
+    res.redirect("/login") ;
+  }
+
+    }) ;
+
+
+    app.post("/submit", function(req,res){
+
+
+      const submittedSecret= req.body.secret ;
+
+
+      User.findById(req.user.id, function(err, foundUser){
+
+        if(err)console.log(err) ;
+        else
+        {
+
+          if(foundUser)
+          {
+            foundUser.secret= submittedSecret ;
+            foundUser.save(function(){
+                res.redirect("/secrets") ;
+            }) ;
+          }
+        }
+
+      }) ;
+
+     
+
     }) ;
 
     app.post("/register",function(req,res){
@@ -138,6 +223,8 @@ passport.deserializeUser(User.deserializeUser());
         
 
     }) ;
+
+
 
 
     app.get("/logout", function(req,res){
